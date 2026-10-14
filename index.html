@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Safi — l'appli des femmes</title>
+<style>
+:root{--plum:#3b1c4a;--gold:#f2a900;--lilac:#f6f1fa;--ink:#24132c;--line:#e0d3ea;--ok:#1f8a5b}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:var(--lilac);color:var(--ink);padding-bottom:72px}
+header{background:var(--plum);color:#fff;padding:18px 16px}header h1{margin:0;font:700 26px Georgia,serif}header p{margin:4px 0 0;opacity:.8;font-size:14px}
+main{max-width:560px;margin:auto;padding:16px}h2{font:700 20px Georgia,serif;margin:0 0 12px}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+label{display:block;font-size:13px;margin:8px 0 3px}input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:15px}
+button{background:var(--plum);color:#fff;border:0;border-radius:8px;padding:10px 14px;font-size:15px;cursor:pointer;margin-top:8px}
+button.gold{background:var(--gold);color:var(--ink);font-weight:700}button.sos{background:#c62839;font-size:18px;width:100%;padding:16px}
+button.ghost{background:none;color:var(--plum);border:1px solid var(--plum)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+.big{font:700 22px Georgia,serif;color:var(--plum)}.muted{color:#6b5a76;font-size:13px}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:flex;overflow-x:auto}
+nav button{flex:1;min-width:64px;background:none;color:var(--ink);margin:0;border-radius:0;padding:10px 4px;font-size:12px}
+nav button.on{color:var(--plum);border-top:3px solid var(--gold);font-weight:700}
+.call{position:fixed;inset:0;background:#111;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;z-index:9}
+.call button{background:#c62839;border-radius:50%;width:70px;height:70px}
+:focus-visible{outline:3px solid var(--gold)}
+</style>
+</head>
+<body>
+<header><h1>Safi</h1><p>Santé, sécurité, argent et famille au même endroit</p></header>
+<main id="app"></main><nav id="nav"></nav>
+<script>
+const TABS=[["cycle","Cycle"],["secu","Sécurité"],["tontine","Tontine"],["shop","Boutique"],["pro","Annuaire"],["kid","Enfant"],["acct","Compte"]];
+const VAX=[["Naissance (673809885, polio 0)",0],["6 semaines",42],["10 semaines",70],["14 semaines",98],["9 mois (rougeole, fièvre jaune)",274]];
+let S=JSON.parse(localStorage.getItem("safi")||"null")||{tab:"cycle",cycle:{last:"",len:28},contacts:[],tontine:{amount:5000,round:0,members:[]},shop:{phone:"",items:[]},pros:[{n:"Salon Belle Tresse",s:"Coiffure",p:"237600000000"},{n:"Chez Mama Pâtisserie",s:"Pâtisserie",p:"237600000001"}],kid:{name:"",birth:"",done:[]}};
+let U=null,ONLINE=false,T;
+async function api(r,m="GET",b){const x=await fetch("api.php?r="+r,{method:m,credentials:"same-origin",headers:{"Content-Type":"application/json"},body:b?JSON.stringify(b):undefined});const j=await x.json().catch(()=>({}));if(!x.ok||!j.ok)throw new Error(j.error||"Serveur indisponible");return j}
+const priv=()=>({cycle:S.cycle,contacts:S.contacts,tontine:S.tontine,shop:S.shop,kid:S.kid});
+const local=()=>localStorage.setItem("safi",JSON.stringify(S));
+const save=()=>{local();draw();if(U){clearTimeout(T);T=setTimeout(()=>api("data","PUT",{data:priv()}).catch(()=>{}),800)}};
+async function loadPros(){try{S.pros=(await api("pros")).pros}catch{}}
+async function loadAll(){const d=await api("data");if(d.data)Object.assign(S,d.data);else await api("data","PUT",{data:priv()});await loadPros();local()}
+async function auth(m){try{U=(await api(m,"POST",{name:v("un"),email:v("ue"),password:v("up")})).user;await loadAll();S.tab="cycle";draw()}catch(e){$("ue2").textContent=e.message}}
+async function logout(){try{await api("logout","POST")}catch{}U=null;draw()}
+async function addPro(){const b={n:v("an"),s:v("as"),p:v("ap")};if(!b.n||!b.p)return;if(!ONLINE){S.pros.push({id:Date.now(),n:b.n,s:b.s,p:b.p.replace(/\D/g,""),mine:true});return save()}if(!U)return alert("Connecte-toi (onglet Compte) pour ajouter une prestataire.");try{await api("pros","POST",b);await loadPros();draw()}catch(e){alert(e.message)}}
+async function delPro(id){if(!ONLINE){S.pros=S.pros.filter(p=>p.id!=id);return save()}try{await api("pros&id="+id,"DELETE");await loadPros();draw()}catch(e){alert(e.message)}}
+const $=(id)=>document.getElementById(id), v=id=>$(id).value;
+const fmt=d=>d.toLocaleDateString("fr-FR",{day:"numeric",month:"long"});
+const add=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
+const wa=(p,t)=>"https://wa.me/"+(p||"")+"?text="+encodeURIComponent(t);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const V={
+cycle(){const c=S.cycle;let out='<p class="muted">Entre la date de tes dernières règles.</p>';
+ if(c.last){const n=add(c.last,c.len),o=add(n,-14);out=`<div class="row"><span>Prochaines règles</span><b class="big">${fmt(n)}</b></div><div class="row"><span>Ovulation estimée</span><b>${fmt(o)}</b></div><div class="row"><span>Période fertile</span><b>${fmt(add(o,-5))} – ${fmt(add(o,1))}</b></div><p class="muted">Estimation : ne remplace pas une contraception.</p>`}
+ return `<h2>Suivi du cycle</h2><div class="card"><label>Premier jour des dernières règles</label><input type="date" id="cl" value="${c.last}"><label>Durée du cycle (jours)</label><input type="number" id="cn" min="21" max="40" value="${c.len}"><button onclick="S.cycle={last:v('cl'),len:+v('cn')||28};save()">Calculer</button></div><div class="card">${out}</div>`},
+secu(){return `<h2>Sécurité</h2><div class="card"><button class="sos" onclick="sos()">ALERTE : envoyer ma position</button><p class="muted">Ouvre WhatsApp avec ta position pour tes proches de confiance.</p></div>
+<div class="card"><b>Proches de confiance</b>${S.contacts.map((c,i)=>`<div class="row"><span>${esc(c.n)} · ${esc(c.p)}</span><button class="ghost" onclick="S.contacts.splice(${i},1);save()">Retirer</button></div>`).join("")}<label>Nom</label><input id="sn"><label>Téléphone (avec indicatif, ex. 2376…)</label><input id="sp" inputmode="tel"><button onclick="if(v('sn')&&v('sp')){S.contacts.push({n:v('sn'),p:v('sp').replace(/\\D/g,'')});save()}">Ajouter</button></div>
+<div class="card"><b>Faux appel</b><p class="muted">Pour t'éloigner d'une situation gênante.</p><button class="gold" onclick="fake()">Appel dans 5 secondes</button></div>`},
+tontine(){const t=S.tontine,m=t.members,ben=m.length?m[t.round%m.length].n:"—";
+ return `<h2>Tontine</h2><div class="card"><div class="row"><span>Cagnotte du tour</span><b class="big">${(t.amount*m.length).toLocaleString("fr-FR")} FCFA</b></div><div class="row"><span>Bénéficiaire du tour ${t.round+1}</span><b>${esc(ben)}</b></div>
+${m.map((x,i)=>`<div class="row"><label style="margin:0"><input type="checkbox" style="width:auto" ${x.paid?"checked":""} onchange="S.tontine.members[${i}].paid=this.checked;save()"> ${esc(x.n)}</label><button class="ghost" onclick="S.tontine.members.splice(${i},1);save()">Retirer</button></div>`).join("")}
+<label>Cotisation par personne (FCFA)</label><input type="number" id="ta" value="${t.amount}" onchange="S.tontine.amount=+this.value;save()"><label>Nouvelle membre</label><input id="tn"><button onclick="if(v('tn')){S.tontine.members.push({n:v('tn'),paid:false});save()}">Ajouter</button>
+<button class="gold" onclick="if(S.tontine.members.every(x=>x.paid)||confirm('Des cotisations manquent. Passer au tour suivant ?')){S.tontine.round++;S.tontine.members.forEach(x=>x.paid=false);save()}">Tour suivant</button></div>`},
+shop(){const s=S.shop;return `<h2>Boutique WhatsApp</h2><div class="card">${s.items.map((p,i)=>`<div class="row"><span>${esc(p.n)} · ${(+p.pr).toLocaleString("fr-FR")} FCFA</span><button class="ghost" onclick="S.shop.items.splice(${i},1);save()">Retirer</button></div>`).join("")||'<p class="muted">Ajoute ton premier produit.</p>'}
+<label>Produit</label><input id="pn"><label>Prix (FCFA)</label><input id="pp" type="number"><button onclick="if(v('pn')){S.shop.items.push({n:v('pn'),pr:+v('pp')||0});save()}">Ajouter le produit</button></div>
+<div class="card"><label>Ton numéro WhatsApp</label><input id="sh" inputmode="tel" value="${esc(s.phone)}" onchange="S.shop.phone=this.value.replace(/\\D/g,'');save()"><button class="gold" onclick="window.open(wa('','Catalogue :\\n'+S.shop.items.map(p=>'• '+p.n+' — '+p.pr+' FCFA').join('\\n')+'\\nCommande : '+S.shop.phone))">Partager mon catalogue</button></div>`},
+pro(){return `<h2>Annuaire et réservation</h2>${S.pros.map(p=>`<div class="card"><b>${esc(p.n)}</b><div class="muted">${esc(p.s)}</div>${p.mine?`<button class="ghost" onclick="delPro(${p.id})">Retirer</button> `:""}<button class="gold" onclick="window.open(wa('${esc(p.p)}','Bonjour, je souhaite réserver : ${esc(p.s)}. Quelles sont vos disponibilités ?'))">Réserver sur WhatsApp</button></div>`).join("")}
+<div class="card"><b>Ajouter une prestataire</b><label>Nom</label><input id="an"><label>Service</label><input id="as"><label>Téléphone</label><input id="ap" inputmode="tel"><button onclick="addPro()">Ajouter</button></div>`},
+acct(){if(U)return `<h2>Mon compte</h2><div class="card"><b>${esc(U.name)}</b><div class="muted">${esc(U.email)}</div><p class="muted">Tes données sont synchronisées sur ton compte.</p><button class="ghost" onclick="logout()">Se déconnecter</button></div>`;
+return `<h2>Mon compte</h2><div class="card"><p class="muted">${ONLINE?"Connecte-toi pour retrouver tes données sur tous tes appareils.":"Serveur indisponible : l'appli fonctionne en mode local."}</p><label>Nom (pour créer un compte)</label><input id="un"><label>E-mail</label><input id="ue" type="email"><label>Mot de passe (8 caractères minimum)</label><input id="up" type="password"><button onclick="auth('login')">Se connecter</button> <button class="gold" onclick="auth('register')">Créer mon compte</button><p class="muted" id="ue2" role="alert"></p></div>`},
+kid(){const k=S.kid;return `<h2>Carnet de l'enfant</h2><div class="card"><label>Prénom</label><input id="kn" value="${esc(k.name)}"><label>Date de naissance</label><input type="date" id="kb" value="${k.birth}"><button onclick="S.kid={...S.kid,name:v('kn'),birth:v('kb')};save()">Enregistrer</button></div>
+${k.birth?`<div class="card"><b>Vaccins de ${esc(k.name||"l'enfant")}</b>${VAX.map((x,i)=>`<div class="row"><label style="margin:0"><input type="checkbox" style="width:auto" ${k.done.includes(i)?"checked":""} onchange="toggleV(${i})"> ${x[0]}<div class="muted">vers le ${fmt(add(k.birth,x[1]))}</div></label></div>`).join("")}<p class="muted">Calendrier indicatif : confirme-le avec ton centre de santé.</p></div>`:""}`}
+};
+function toggleV(i){const d=S.kid.done;d.includes(i)?d.splice(d.indexOf(i),1):d.push(i);save()}
+function sos(){if(!S.contacts.length)return alert("Ajoute d'abord un proche de confiance.");
+ const go=(loc)=>{S.contacts.forEach(c=>window.open(wa(c.p,"J'ai besoin d'aide. "+(loc?"Ma position : https://maps.google.com/?q="+loc:"Position indisponible, appelle-moi."))))};
+ navigator.geolocation?navigator.geolocation.getCurrentPosition(p=>go(p.coords.latitude+","+p.coords.longitude),()=>go(),{timeout:8000}):go()}
+function fake(){setTimeout(()=>{const d=document.createElement("div");d.className="call";d.innerHTML='<div class="muted" style="color:#ccc">Appel entrant</div><div class="big" style="color:#fff">Maman</div><button onclick="this.parentNode.remove()">✕</button>';document.body.append(d);navigator.vibrate&&navigator.vibrate([400,200,400])},5000)}
+function draw(){$("app").innerHTML=V[S.tab]();$("nav").innerHTML=TABS.map(t=>`<button class="${S.tab==t[0]?"on":""}" onclick="S.tab='${t[0]}';save()">${t[1]}</button>`).join("")}
+(async()=>{try{const m=await api("me");ONLINE=true;U=m.user;if(U)await loadAll();else await loadPros()}catch{}draw()})();
+</script>
+</body>
+</html>
